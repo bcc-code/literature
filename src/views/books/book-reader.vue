@@ -1,11 +1,11 @@
 <template>
   <div>
     <not-found v-if="notFound" />
-    <template v-show="!notFound">
+    <template v-else>
         <section class="container reading-view">
             <app-header :backButtonRoute="getBackButtonRoute" :pageName="book ? book.title : ''" />
             <loader ref="loader">
-                <article class="center small">  
+                <article class="center small" :style="{ zoom: fontSize }">  
                     <template v-if="!articles || (book != null && showingFirstChapter)">
                         <Title :book="book" :year="year" :month="month" :title="articles[0].title"/>
                     </template>
@@ -28,7 +28,9 @@
             </loader>
         </section>
         <a alt="Toggle Sidebar" class="toggle-sidebar button-circular main" @click="showSidebar = !showSidebar"></a>
-        <app-sidebar v-show="showSidebar" @chapterChanged="changeChapter" />
+        <a alt="Share" class="share button-circular secondary" @click="openShareModal"></a>"
+        <app-sidebar @chapterChanged="changeChapter" />
+        <ShareLinkModal v-show="showShareModal" :url="shareUrl" :message="shareMessage"></ShareLinkModal>
     </template>
     <div id="print-footer">© Copyright Skjulte Skatters Forlag N-4098 Tananger, Norway.</div>
   </div>
@@ -37,10 +39,10 @@
 <script>
 import AppHeader from 'components/layout/app-header';
 import AppSidebar from 'components/layout/app-sidebar';
-import { EventBus, Events } from '@/utils/eventBus';
+import ShareLinkModal from 'components/reader/share-link-modal';
 import NotFound from 'components/not-found';
 import BookMixins from '@/mixins/book';
-import { mapActions } from 'vuex';
+import { mapActions, mapState } from 'vuex';
 import Loader from 'components/la-loader';
 import Title from 'components/reader/reader-title.vue';
 import ArticleScroller from 'components/reader/article-scroller';
@@ -48,6 +50,7 @@ import ArticleFull from 'components/reader/article-full';
 import SubscriptionRequired from 'components/reader/subscription-required-info';
 import FontFaceObserver from 'fontfaceobserver';
 import ReaderMixins from '@/mixins/reader';
+import BaseApi from '@/utils/api/baseApi.js';
 
 export default {
     components: {
@@ -58,11 +61,13 @@ export default {
         ArticleScroller,
         SubscriptionRequired,
         AppSidebar,
-        NotFound
+        NotFound,
+        ShareLinkModal
     },
     data() {
         return {
             showSidebar: true,
+            showShareModal : false,
             notFound: false,
             articles: [],
             amountToLoad: 5,
@@ -73,6 +78,7 @@ export default {
     },
     mixins: [BookMixins, ReaderMixins],
     computed: {
+        ...mapState('session', ['fontSize']),
         allArticles() {
             return this.$store.getters['articles/getAllByBookId'](this.bookId);
         },
@@ -90,6 +96,12 @@ export default {
         },
         getBackButtonRoute(){
             return this.$route.params.parent ? this.$route.params.parent : { name: 'book-index', params: { bookId: this.$route.params.bookId }};
+        },
+        shareUrl(){
+            return BaseApi.addLanguageQuery(window.location.origin + this.$route.fullPath);
+        },
+        shareMessage(){
+            return this.$t('share.message', { chapterName: this.selectedChapterTitle });
         }
     },
     methods: {
@@ -146,6 +158,18 @@ export default {
                 this.$refs.loader.reset();
             };
         },
+        openShareModal(){
+            if (navigator.share) {
+                navigator.share({
+                    title: this.selectedChapterTitle,
+                    text: this.shareMessage,
+                    url: this.shareUrl
+                });
+            }
+            else {
+                this.showShareModal = true;
+            }
+        }
     },
     watch: {
         showSidebar: function () {
