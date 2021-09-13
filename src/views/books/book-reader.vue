@@ -10,25 +10,29 @@
                         <Title :book="book" :year="year" :month="month" :title="articles[0].title"/>
                     </template>
                     <ArticleScroller v-if="isContentVisible"
-                    :articles="articles"
-                    :loadTopHandler="( isPublication || showingFirstChapter) ? null : loadTop"
-                    :loadBottomHandler="isPublication  ? null : loadBottom"
-                    :getElementName="(article) => getElementName(article)"
-                    :no-lazy-load="isPublication"
-                    @change="(article) => setCurrentChapter(article.chapterId)">
+                        :articles="articles"
+                        :loadTopHandler="( isPublication || showingFirstChapter) ? null : loadTop"
+                        :loadBottomHandler="isPublication  ? null : loadBottom"
+                        :getElementName="(article) => getElementName(article)"
+                        :no-lazy-load="isPublication"
+                        @change="(article) => setCurrentChapter(article.chapterId)"
+                    >
                         <ArticleFull v-for="article in articles"
-                        :key="article.id"
-                        :article="article"
-                        :highlight="wordsToHighlight"
-                        :id="getElementName(article)"
-                        ref="articles"/>
+                            :key="article.id"
+                            :article="article"
+                            :highlight="wordsToHighlight"
+                            :bmmAlbumId="bmmAlbumId"
+                            :audioBookUrl="audioBookUrl"
+                            :id="getElementName(article)"
+                            ref="articles" />
                     </ArticleScroller>
                     <SubscriptionRequired :book="book" v-else></SubscriptionRequired>
                 </article>
             </loader>
         </section>
         <a alt="Toggle Sidebar" class="toggle-sidebar button-circular main" @click="showSidebar = !showSidebar"></a>
-        <app-sidebar @chapterChanged="changeChapter" />
+        <app-sidebar v-show="showSidebar" @chapterChanged="changeChapter" />
+        <TextToSpeechPlayer :articles="articles" />
     </template>
     <div id="print-footer">© Copyright Skjulte Skatters Forlag N-4098 Tananger, Norway.</div>
   </div>
@@ -37,7 +41,7 @@
 <script>
 import AppHeader from 'components/layout/app-header';
 import AppSidebar from 'components/layout/app-sidebar';
-import { EventBus, Events } from '@/utils/eventBus';
+import TextToSpeechPlayer from 'components/layout/app-text-to-speech-player';
 import NotFound from 'components/not-found';
 import BookMixins from '@/mixins/book';
 import { mapActions } from 'vuex';
@@ -58,7 +62,8 @@ export default {
         ArticleScroller,
         SubscriptionRequired,
         AppSidebar,
-        NotFound
+        NotFound,
+        TextToSpeechPlayer
     },
     data() {
         return {
@@ -66,6 +71,7 @@ export default {
             notFound: false,
             articles: [],
             amountToLoad: 5,
+            readingChapterId: null
         }
     },
     created() {
@@ -88,8 +94,21 @@ export default {
         isContentVisible() {
             return this.articles.every((el) => { return el.contentVisible });
         },
-        getBackButtonRoute(){
+        getBackButtonRoute() {
             return this.$route.params.parent ? this.$route.params.parent : { name: 'book-index', params: { bookId: this.$route.params.bookId }};
+        },
+        audioBookUrl (){
+            return this.book.audioBookUrl;
+        },
+        bmmAlbumId () {
+            if(!this.audioBookUrl) {
+                return null;
+            }
+
+            let searchKey = 'album/',
+                albumIndex = this.audioBookUrl.indexOf(searchKey),
+                albumId = this.audioBookUrl.substr(0, this.audioBookUrl.length - (albumIndex + searchKey.length));
+            return albumId;
         }
     },
     methods: {
@@ -114,7 +133,7 @@ export default {
                             year: parseInt(this.$route.params.year), 
                             month: parseInt(this.$route.params.month),
                             chapterId: isNaN(chapterId) ? 1 : chapterId,
-                            parent: this.$route.params.parent
+                            parent: this.$route.params.parent,
                         }});
                 }
                 this.isPublication
@@ -139,13 +158,13 @@ export default {
         },
         changeChapter(chapterId) {
             this.showSidebar = false;
-            if (this.scrollToChapter(chapterId) == false){
+            if (this.scrollToChapter(chapterId) == false) {
                 /* Force reload the reader component */
                 this.$store.dispatch('articles/base/reset');
                 this.setCurrentChapter(chapterId);
                 this.$refs.loader.reset();
-            };
-        },
+            }
+        }
     },
     watch: {
         showSidebar: function () {
@@ -156,17 +175,16 @@ export default {
 </script>
 
 <style>
-#print-footer{
+#print-footer {
     display: none;
 }
 
 @media print {
-    @page  
-    { 
+    @page { 
         size: auto;
         margin: 27mm 16mm 27mm 16mm; 
     } 
-    #bcc-widget-topbar, header, footer{
+    #bcc-widget-topbar, header, footer {
         display: none !important;
     }
     #print-footer {
